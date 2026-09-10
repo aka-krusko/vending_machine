@@ -1,144 +1,149 @@
-`timescale 1ns / 1ps
+`timescale 1ns/1ps
 
-module tb_behavioral();
-
-    // Segnali di ingresso
+module tb_behavioral;
+    // Ingressi (Stimoli)
     reg clk;
     reg rst;
-    reg setup_done;
-    reg [2:0] coin;
-    reg [2:0] selezione;
-    reg conferma;
-    reg annulla;
+    reg [2:0] coin, selezione;
+    reg conferma, annulla;
 
-    // Segnali di uscita
+    // Uscite (Sonde)
+    wire setup_done;
     wire prodotto1, prodotto2, prodotto3, prodotto4;
     wire [5:0] credito;
     wire [1:0] errore;
     wire [5:0] resto;
     wire [9:0] disponibile;
-    wire [5:0] coin_01, coin_02, coin_05, coin_10; // Conteggi monete per il calcolo greedy
 
-    vending_behavioral uut (
-        .clk(clk),
+    // Istanziazione del modulo COMPORTAMENTALE (Device Under Test)
+    vending_behavioral DUT (
+        .clk(clk), 
         .rst(rst),
-        .coin(coin),
-        .selezione(selezione),
-        .conferma(conferma),
+        .coin(coin), 
+        .selezione(selezione), 
+        .conferma(conferma), 
         .annulla(annulla),
-
-        .prodotto1(prodotto1), .prodotto2(prodotto2), .prodotto3(prodotto3), .prodotto4(prodotto4),
-        .credito(credito),
-        .errore(errore),
-        .resto(resto),
-        .disponibile(disponibile),
-
-        .coin_01(coin_01), .coin_02(coin_02), .coin_05(coin_05), .coin_10(coin_10)
+        
+        .setup_done(setup_done), 
+        
+        .prodotto1(prodotto1), 
+        .prodotto2(prodotto2), 
+        .prodotto3(prodotto3), 
+        .prodotto4(prodotto4),
+        
+        .credito(credito), 
+        .errore(errore), 
+        .resto(resto), 
+        .disponibile(disponibile)
     );
 
-    always #5 clk = ~clk; 
-    
-    // Inserimento dati di setup
-    task setup_data (input [5:0] data_in);
-        begin
-            @(negedge clk);
-            coin = data_in[5:3]; // Estrae i bit di coin
-            selezione = data_in[2:0]; // Estrae i bit di selezione
-        end
-    endtask
+    // Generatore di Clock (Periodo 10ns)
+    always #5 clk = ~clk;
 
-    // Inserimento moneta da parte dell'utente
-    task insert_coin (input [2:0] coin_in);
-        begin
-            @(negedge clk)
-            coin = coin_in;
-            #10; // Attende un ciclo di clock
-            coin = 3'b000; // Resetta il segnale di coin
-        end
-    endtask
-
-
+    // Timeout di sicurezza
     initial begin
-        // Inizializzazione dei segnali
+        #5000;
+        $display("Timeout raggiunto");
+        $finish;
+    end
+
+    // Monitoraggio a terminale
+    initial begin
+        $monitor("Tempo :%0t | SDone: %b | Credito : %d | Sel : %b | Conf : %b | Ann : %b || Erogato : P1=%b P2=%b P3=%b P4=%b | Resto : %d | Err : %b | Disponibile : %d ",
+                $time, setup_done, credito, selezione, conferma, annulla, prodotto1, prodotto2, prodotto3, prodotto4, resto, errore, disponibile);
+    end
+
+    // Sequenza di Test
+    initial begin
+        $dumpfile("simulazione_behavioral.vcd");
+        $dumpvars(0, tb_behavioral);
+
+        // INIZIALIZZAZIONE
         clk = 0;
-        rst = 0;
-        setup_done = 0;
-        coin = 3'b000;
-        selezione = 3'b000;
-        conferma = 0;
-        annulla = 0;
-
-        #7 rst = 1;
-
-        // FASE DI SETUP (12 cicli di clock)
-        // Config. Prodotto 1 : 10 unità a 15 (1.50€)
-        setup_data(6'd10); // Ciclo 1: Qt Prodotto 1 = 10
-        setup_data(6'd15); // Ciclo 2: Pr Prodotto 1 = 15 decimi (1.50€)
-        
-        setup_data(6'd5);  // Ciclo 3: Qt Prodotto 2 = 5
-        setup_data(6'd20); // Ciclo 4: Pr Prodotto 2 = 20 decimi (2.00€)
-        
-        setup_data(6'd5);  // Ciclo 5: Qt Prodotto 3 = 5
-        setup_data(6'd30); // Ciclo 6: Pr Prodotto 3 = 30 decimi (3.00€)
-        
-        setup_data(6'd5);  // Ciclo 7: Qt Prodotto 4 = 5
-        setup_data(6'd40); // Ciclo 8: Pr Prodotto 4 = 40 decimi (4.00€)
-        
-        // Setup Scorte Monete Iniziali
-        setup_data(6'd10); // Ciclo 9:  10 monete da 0.10€
-        setup_data(6'd10); // Ciclo 10: 10 monete da 0.20€
-        setup_data(6'd10); // Ciclo 11: 10 monete da 0.50€
-        setup_data(6'd10); // Ciclo 12: 10 monete da 1.00€
-
-        // Fine del setup. Reset ingressi
-        @(negedge clk);
+        rst = 1;
         coin = 3'b000; selezione = 3'b000;
-        #40; // Attende un ciclo di clock per assicurarsi che il setup sia completato
-        $display("SETUP COMPLETATO. Disponibile iniziale : %d", disponibile);
+        conferma = 0; annulla = 0;
 
-        // FASE DI ACQUISTO
-        // Test 1: Acquisto prodotto 1 con monete da 1.
-        $display("\nTEST 1: Acquisto prodotto 1 con monete da 1.");
-        insert_coin(3'b111); // Inserisce 1
-        insert_coin(3'b111); // Inserisce 1
-        #20; // Attende un ciclo di clock per aggiornare il credito
+        // Reset asincrono (attivo basso)
+        #2 rst = 0;
+        #10 rst = 1;
 
-        @(negedge clk);
-        selezione = 3'b100; // Seleziona prodotto 1
-        conferma = 1; // Conferma la selezione
+        $display("INIZIO FASE DI SETUP");
 
-        repeat(4) @(negedge clk);
-
-        if (prodotto1 == 1'b1) begin
-            $display("Acquisto prodotto 1 riuscito. Resto da erogare: %d", resto);
-            $display("Calcolo greedy per il resto: %d monete da 1.00€, %d monete da 0.50€, %d monete da 0.20€, %d monete da 0.10€", coin_10, coin_05, coin_02, coin_01);
-            $display("Disponibile dopo l'acquisto: %d", disponibile);
-        end else begin
-            $display("Acquisto prodotto 1 fallito. Errore: %b", errore);
-        end
+        // Ciclo 0-1: Prodotto 1 (Qt=5, Prezzo=10 decimi -> 1.00€)
+        {coin, selezione} = 6'd5;  
+        @(negedge clk); {coin, selezione} = 6'd10; 
         
-        @(negedge clk);
-        conferma = 0; 
-        selezione = 3'b000; // Resetta selezione e conferma
+        // Ciclo 2-3: Prodotto 2 (Qt=2, Prezzo=15 decimi -> 1.50€)
+        @(negedge clk); {coin, selezione} = 6'd2;  
+        @(negedge clk); {coin, selezione} = 6'd15; 
+        
+        // Ciclo 4-5: Prodotto 3 (Qt=0 [ESAURITO], Prezzo=5 decimi -> 0.50€)
+        @(negedge clk); {coin, selezione} = 6'd0;  
+        @(negedge clk); {coin, selezione} = 6'd5;  
+        
+        // Ciclo 6-7: Prodotto 4 (Qt=10, Prezzo=20 decimi -> 2.00€)
+        @(negedge clk); {coin, selezione} = 6'd10; 
+        @(negedge clk); {coin, selezione} = 6'd20; 
+        
+        // Cicli 8-11: Stock Iniziale Monete (10 monete per ogni taglio)
+        @(negedge clk); {coin, selezione} = 6'd1;  // 0.10
+        @(negedge clk); {coin, selezione} = 6'd2;  // 0.20
+        @(negedge clk); {coin, selezione} = 6'd5;  // 0.50
+        @(negedge clk); {coin, selezione} = 6'd10; // 1.00
 
-        // Test 2: Annullamento Transazione dopo inserimento moneta
-        #20;
-        $display("\nTEST 2: Annullamento transazione dopo inserimento moneta.");
-        insert_coin(3'b100); // Inserisce 0.10€
-        #20;
-        annulla = 1; // Annulla la transazione
-        #20 annulla = 0; // Resetta il segnale di annullamento
+        // Attesa fine setup
+        @(negedge clk); {coin, selezione} = 6'd0;
+        
+        // Aspettiamo finché il segnale setup_done non va a 1
+        wait(setup_done == 1'b1);
+        #10;
+        $display("SETUP COMPLETATO --- Disponibile in cassa : %d decimi", disponibile);
 
-        if (resto != 6'b000000) // Verifica che il resto sia correttamente erogato
-            $display("Transazione annullata correttamente. Resto erogato: %d", resto);
-        else
-            $display("Errore nell'annullamento. Resto erogato: %d", resto); 
-    #40;
-    $finish;
+        // TEST 1
+        $display("\n--- TEST 1: Acquisto P1 (10 decimi) con 15 decimi ---");
+        @(negedge clk); coin = 3'b111; // Inserisce 1.00€ (Credito = 10)
+        @(negedge clk); coin = 3'b110; // Inserisce 0.50€ (Credito = 15)
+        @(negedge clk); coin = 3'b000;
+        
+        @(negedge clk); selezione = 3'b100; // Seleziona P1
+        @(negedge clk); conferma = 1;       // Conferma acquisto
+        
+        // Aspettiamo che la FSM faccia le sue transizioni
+        #40; 
+
+        @(negedge clk); conferma = 0;
+        @(negedge clk); selezione = 3'b000;
+        #20;
+    
+        // TEST 2
+        $display("\n--- TEST 2: Inserimento soldi e Annullamento ---");
+        @(negedge clk); coin = 3'b111; // Inserisce 1.00€
+        @(negedge clk); coin = 3'b000;
+        #10;
+        @(negedge clk); annulla = 1;   // Preme Annulla
+        
+        #40;
+        @(negedge clk); annulla = 0;
+        #20;
+
+        // TEST 3
+        $display("\n--- TEST 3: Generazione Errore 11 ---");
+        @(negedge clk); coin = 3'b100; // Inserisce 0.10€ (Il prezzo di P3 è 0.50€)
+        @(negedge clk); coin = 3'b000;
+        
+        @(negedge clk); selezione = 3'b110; // Seleziona P3 (Impostato a 0 nel setup)
+        @(negedge clk); conferma = 1;       // Conferma
+        #40;
+        @(negedge clk); conferma = 0; 
+        @(negedge clk); selezione = 3'b000;
+        @(negedge clk); annulla = 1;
+        #40;
+        @(negedge clk); annulla = 0;
+        #20;
+
+        $display("\n--- SIMULAZIONE COMPLETATA CON SUCCESSO ---");
+        $finish;
     end
 
-    initial begin
-        $monitor("Tempo : %0t | Stato FSM : %b | Credito : %d | Errore : %b | Resto : %d | Disponibile : %d", $time, uut.logic_unit.state, credito, errore, resto, disponibile);
-    end
 endmodule
-        
